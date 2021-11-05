@@ -41,7 +41,7 @@ async function getLocalBridgeIP() {
     
     if (!!result === false) { 
         console.log('IKEA Tradfri: no gateway found!');
-        exports.settings.status.connection = 'No IKEA Trafri Gateway found! Add the IP manually.';
+        exports.settings.status.connection = 'NO IKEA TRADFRI GATEWAY FOUND';
         return null;
     }
  
@@ -52,7 +52,6 @@ async function getLocalBridgeIP() {
 
 if (exports.enabled) {
     server.enableDeveloperUI(true);
-    let lights;
  
     /**
      * runs once, adds and clears the IO points
@@ -66,8 +65,7 @@ if (exports.enabled) {
         exports.settings = {
             status: {
                 type: 'status',
-                connection: 'DISCOVERING TRADFRI GATEWAY',
-                lights: 0,
+                connection: 'DISCOVERING IKEA TRADFRI GATEWAY',
             },
             localBridgeIP: {
                 value: settings('localBridgeIP'),
@@ -106,15 +104,20 @@ if (exports.enabled) {
             localBridgeIP = settings('localBridgeIP');
         } else {
             const bridgeIP = await getLocalBridgeIP();
-            exports.settings.status.connection = 'IKEA Trafri Gateway found! Add the security code.';
+            
+            if (bridgeIP == null)
+                return;
+
             localBridgeIP = bridgeIP;
+
             exports.settings.localBridgeIP.value = localBridgeIP;
             settingsNeedUpdate = true;
         }
  
         tradfri = await new TradfriClient(localBridgeIP);
         console.log('IKEA Tradfri: Connected to tradfri:', tradfri.hostname);
- 
+        exports.settings.status.connection = 'IKEA TRADFRI GATEWAY FOUND';
+
         if (settings('identity') && settings('psk')) {
             console.log('IKEA Tradfri: Identity and psk known.');
             identity = settings('identity');
@@ -122,22 +125,28 @@ if (exports.enabled) {
         } else {
             if (!settings('securityCode')) {
                 console.log('IKEA Tradfri: No security code set, unable to authenticate.');
+                exports.settings.status.connection = 'ADD IKEA TRADFRI GATEWAY SECURITY CODE';
             }
             else
             {
                 securityCode = settings('securityCode');
                 console.log('IKEA Tradfri: Unknown identity and PSK, using securityCode');
-                const authResponse = await tradfri.authenticate(securityCode);
-                console.log(authResponse);
-                identity = authResponse.identity;
-                psk = authResponse.psk;
                 
-                exports.settings.status.connection = 'PAIRED WITH IKEA TRADFRI GATEWAY';
-                
-                exports.settings.identity.value = identity;
-                exports.settings.psk.value = psk;
-                
-                settingsNeedUpdate = true;
+                try {
+                    const authResponse = await tradfri.authenticate(securityCode);
+                    console.log(authResponse);
+                    identity = authResponse.identity;
+                    psk = authResponse.psk;
+                    
+                    exports.settings.status.connection = 'PAIRED WITH IKEA TRADFRI GATEWAY';
+                    exports.settings.identity.value = identity;
+                    exports.settings.psk.value = psk;
+                                    
+                    settingsNeedUpdate = true;
+                }
+                catch {
+                    exports.settings.status.connection = 'INVALID IKEA TRADFRI GATEWAY SECURITY CODE';
+                }
             }
         }
  
@@ -151,18 +160,29 @@ if (exports.enabled) {
     }
  
     /**
-     * The main function, runs the setup and then periodically checks whether
-     * the lights are on.
+     * The main function
      */
     async function ikeaTradfriServer() { // eslint-disable-line no-inner-declarations
-        console.log('Starting IKEA Tradfri');
+        console.log('IKEA Tradfri: Starting hardware infterface...');
         
         await setup();
  
         try {
             await tradfri.connect(exports.settings.identity.value, exports.settings.psk.value);
         } catch (e) {
-            // handle error - see below for details
+            console.log("IKEA Tradfri: Connection failed!");
+
+            exports.settings.status.connection = 'INVALID IKEA TRADFRI GATEWAY IDENTITY / PSK';
+            exports.settings.identity.value = "";
+            exports.settings.psk.value = "";
+
+            server.setHardwareInterfaceSettings('ikeaTradfri', exports.settings, null, function(successful, error) {
+                if (error) {
+                    console.log('error persisting settings', error);
+                }
+            });
+
+            return;
         }
 
         const lightControllerInstance = new LightController(tradfri, server); 
@@ -209,18 +229,7 @@ if (exports.enabled) {
             //TODO: remove device
         }
     }
- 
-    /**
-     * @param {string} lightId
-     * @param {Function} writeFn
-     * @return {Function} read listener callback that invokes writeFn
-     */
-    function onRead(lightId, writeFn) { // eslint-disable-line no-inner-declarations
-        return function(data) {
-            writeFn(lights[lightId], data.value);
-        };
-    }
- 
+    
     var tradfriLib = require('node-tradfri-client');
     var TradfriClient = tradfriLib.TradfriClient;
     var AccessoryTypes = tradfriLib.AccessoryTypes;

@@ -216,9 +216,6 @@
 <template id="status">
     <div class="setting">
         <div class="connection button green four">SEARCHING FOR HUE BRIDGE</div>
-        <div class="lights">
-            <div class="name button yellow two inactive">No Lights Found</div>
-        </div>
     </div>
 </template>
 
@@ -294,17 +291,6 @@
             if (setting.type === 'status') {
                 const status = this.templates.status.content.cloneNode(true);
                 status.querySelector('.connection').innerText = setting.connection;
-                const lights = status.querySelector('.lights');
-                if (Object.keys(setting.lights).length > 0) {
-                    lights.innerHTML = '';
-                }
-                for (let lightId in setting.lights) {
-                    const lightInfo = setting.lights[lightId];
-                    const light = this.templates.light.content.cloneNode(true);
-                    light.querySelector('.name').innerText = 'Light' + lightId;
-                    light.querySelector('.humanName').innerText = lightInfo.name;
-                    lights.appendChild(light);
-                }
                 this.domObjects.appendChild(status);
                 continue;
             }
